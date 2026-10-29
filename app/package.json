@@ -24,7 +24,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Unlicensed",
+  "license": "MIT",
   "description": "A Databricks App powered by AppKit",
   "dependencies": {
     "@databricks/appkit": "0.76.1",

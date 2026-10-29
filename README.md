@@ -127,6 +127,11 @@ practise on the loaded data instead, swap in point tables such as `naptan_stops`
   documentation recall. Have a domain expert spot-check them.
 * **Access testing.** Grants were verified as an admin, not from a non-admin participant account.
 
+## Licence
+The code, notebooks, app and documentation in this repo are released under the [MIT licence](LICENSE). The MIT
+licence does not cover the datasets: each source keeps its own licence, stated in the table descriptions and in
+`docs/DATA_CATALOGUE.md`.
+
 ## Repo layout
 ```
 notebooks/   Databricks source-format notebooks, shared helpers (hackathon_common.py), table_docs.py
