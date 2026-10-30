@@ -1,0 +1,8 @@
+# Bundle deploys replace this with resources/valhalla_routing.app.yml `config`; these
+# literals are the fallback for deploys from the UI.
+command: ["uv", "run", "--no-sync", "uvicorn", "--factory", "routing_app.main:build_app", "--timeout-graceful-shutdown", "10"]
+env:
+  - name: VALHALLA_TILES_DIR
+    value: /Volumes/playground/routing/valhalla/tiles/great-britain
+  - name: VALHALLA_ACTOR_POOL_SIZE
+    value: "4"

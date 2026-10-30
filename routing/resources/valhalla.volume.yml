@@ -1,0 +1,10 @@
+resources:
+  volumes:
+    valhalla:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.routing.name}
+      name: valhalla
+      volume_type: MANAGED
+      comment: >-
+        OpenStreetMap extracts (osm/) and Valhalla tile extracts with their manifests
+        (tiles/<extent>/), © OpenStreetMap contributors, ODbL

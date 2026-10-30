@@ -1,0 +1,48 @@
+resources:
+  jobs:
+    build_valhalla_tiles:
+      name: build-valhalla-tiles
+      description: >-
+        Stream a Geofabrik OSM extract into the valhalla volume, build Valhalla tiles on a
+        classic single node and publish the tar extract the routing App serves.
+      max_concurrent_runs: 1
+      parameters:
+        - name: extent
+          default: ${var.extent}
+        - name: osm_url
+          default: ${var.osm_url}
+        - name: refresh_osm
+          default: "false"
+      # Valhalla is a native engine that needs RAM and a local NVMe disk, so it runs on a
+      # classic single node rather than serverless (the property-search routing pattern).
+      job_clusters:
+        - job_cluster_key: tile_build_node
+          new_cluster:
+            spark_version: 18.2.x-scala2.13
+            node_type_id: ${var.build_node_type_id}
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            # Each target in databricks.yml adds its cloud's on-demand attributes.
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*, 4]"
+              # The build runs in native subprocesses, so leave the node's RAM to them.
+              spark.driver.memory: 4g
+            custom_tags:
+              ResourceClass: SingleNode
+      tasks:
+        - task_key: build_tiles
+          job_cluster_key: tile_build_node
+          timeout_seconds: 7200
+          spark_python_task:
+            python_file: ../src/run_build.py
+            parameters:
+              - --wheel=${workspace.root_path}/artifacts/.internal/routing_in_a_box-0.1.0-py3-none-any.whl
+              - --extent={{job.parameters.extent}}
+              - --osm-url={{job.parameters.osm_url}}
+              - --refresh-osm={{job.parameters.refresh_osm}}
+              - --volume-path=/Volumes/${var.catalog}/${resources.schemas.routing.name}/${resources.volumes.valhalla.name}
+      permissions:
+        - level: CAN_VIEW
+          group_name: users

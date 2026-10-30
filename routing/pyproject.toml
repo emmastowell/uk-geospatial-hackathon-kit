@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "routing_in_a_box"
+version = "0.1.0"
+description = "Build Valhalla routing tiles from OpenStreetMap into a Unity Catalog volume"
+requires-python = ">=3.12"
+dependencies = [
+  "requests>=2.32",
+]
+
+[project.optional-dependencies]
+# Installed on the classic tile-build node as job libraries: a prebuilt wheel with the
+# native Valhalla executables, so no container image. The App pins the same version.
+routing = [
+  "pyvalhalla==3.9.1",
+]
+
+[project.scripts]
+build-valhalla-tiles = "routing_in_a_box.build_tiles:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/routing_in_a_box"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "src/app"]
+extend-exclude = ["notebooks", ".local"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+# tests/app runs in the App's own environment: see tests/app/conftest.py.
+testpaths = ["tests/job"]

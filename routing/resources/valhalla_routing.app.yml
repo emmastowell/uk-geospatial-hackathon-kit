@@ -1,0 +1,35 @@
+resources:
+  apps:
+    valhalla_routing:
+      name: ${var.app_name}
+      description: >-
+        Valhalla routing over OpenStreetMap: routes, isochrones and
+        travel-time matrices at /api, with a demo map
+      source_code_path: ../src/app
+      # Four vCPUs serve four requests at once (one Valhalla Actor each); 12 GB keeps the
+      # memory-mapped Great Britain graph in the page cache.
+      compute_size: LARGE
+      config:
+        command:
+          - uv
+          - run
+          - --no-sync
+          - uvicorn
+          - --factory
+          - routing_app.main:build_app
+          - --timeout-graceful-shutdown
+          - "10"
+        env:
+          - name: VALHALLA_TILES_DIR
+            value: /Volumes/${var.catalog}/${resources.schemas.routing.name}/${resources.volumes.valhalla.name}/tiles/${var.extent}
+          - name: VALHALLA_ACTOR_POOL_SIZE
+            value: "4"
+      resources:
+        - name: valhalla-volume
+          uc_securable:
+            securable_full_name: ${var.catalog}.${resources.schemas.routing.name}.${resources.volumes.valhalla.name}
+            securable_type: VOLUME
+            permission: READ_VOLUME
+      permissions:
+        - level: CAN_USE
+          group_name: users
