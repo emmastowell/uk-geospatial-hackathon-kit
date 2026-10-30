@@ -32,13 +32,14 @@ class TileManifest:
     pyvalhalla_version: str
     osm_url: str
     osm_last_modified: str
+    bbox: dict[str, float] | None = None
 
     @classmethod
     def from_json(cls, text: str) -> "TileManifest":
         data = json.loads(text)
-        return cls(**{field.name: data[field.name] for field in fields(cls)})
+        return cls(**{field.name: data[field.name] for field in fields(cls) if field.name in data})
 
-    def to_dict(self) -> dict[str, str | int]:
+    def to_dict(self) -> dict[str, str | int | dict[str, float] | None]:
         return asdict(self)
 
 

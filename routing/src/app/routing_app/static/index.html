@@ -41,14 +41,14 @@
         <p class="error" id="error" role="alert" hidden></p>
 
         <section class="tab-panel" data-panel="route">
-          <p class="hint">Click the map to set a start, then a destination. Click again to move the
+          <p class="hint" id="route-hint">Click the map to set a start, then a destination. Click again to move the
             destination, or drag either marker.</p>
           <div class="summary" id="route-summary" hidden></div>
           <ol class="maneuvers" id="maneuvers"></ol>
         </section>
 
         <section class="tab-panel" data-panel="isochrone" hidden>
-          <p class="hint">Click the map to set an origin. Areas show where you can reach within each
+          <p class="hint" id="isochrone-hint">Click the map to set an origin. Areas show where you can reach within each
             time.</p>
           <label class="field">Minutes, up to four
             <input id="contours" inputmode="numeric" value="10, 20, 30, 45">

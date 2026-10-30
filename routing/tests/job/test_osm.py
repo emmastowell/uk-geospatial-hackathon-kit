@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from routing_in_a_box.osm import OsmDownloader, sidecar_path
+from routing_in_a_box.osm import OsmDownloader, geocode_bbox, sidecar_path
 
 
 class FakeResponse:
@@ -20,6 +20,9 @@ class FakeResponse:
 
     def raise_for_status(self) -> None:
         return None
+
+    def json(self) -> object:
+        return json.loads(self.body)
 
     def iter_content(self, chunk_size: int) -> Iterator[bytes]:
         for start in range(0, len(self.body), 3):
@@ -69,3 +72,31 @@ def test_rejects_a_truncated_download(tmp_path: Path) -> None:
         OsmDownloader(FakeSession(b"short", content_length=10)).ensure("https://x", destination)
     assert not destination.exists()
     assert not destination.with_name("gb.osm.pbf.partial").exists()
+
+
+class GeocodeSession:
+    def __init__(self, payload: object) -> None:
+        self.payload = payload
+
+    def get(self, url: str, **_: object) -> FakeResponse:
+        body = json.dumps(self.payload).encode() if not isinstance(self.payload, Exception) else b""
+        if isinstance(self.payload, Exception):
+            raise self.payload
+        return FakeResponse(body, {})
+
+
+def test_geocode_bbox_reads_nominatims_south_north_west_east_order() -> None:
+    session = GeocodeSession([{"boundingbox": ["50.57", "50.77", "-1.62", "-1.04"]}])
+
+    assert geocode_bbox("isle-of-wight", session) == {
+        "west": -1.62,
+        "south": 50.57,
+        "east": -1.04,
+        "north": 50.77,
+    }
+
+
+def test_geocode_bbox_returns_nothing_when_nominatim_is_unreachable() -> None:
+    import requests
+
+    assert geocode_bbox("isle-of-wight", GeocodeSession(requests.ConnectionError())) is None

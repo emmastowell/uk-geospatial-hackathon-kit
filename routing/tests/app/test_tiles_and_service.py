@@ -39,6 +39,19 @@ def test_source_reports_nothing_until_a_manifest_is_published(tmp_path: Path) ->
     assert LocalTileSource(tmp_path).read_manifest() is None
 
 
+def test_manifest_accepts_an_older_file_without_a_bbox() -> None:
+    payload = {
+        "extent": "isle-of-wight",
+        "tile_extract": "valhalla_tiles.tar",
+        "size_bytes": 1,
+        "built_at": "2026-10-22T12:00:00+00:00",
+        "pyvalhalla_version": "3.9.1",
+        "osm_url": "https://example.org/iow.osm.pbf",
+        "osm_last_modified": "Tue, 20 Oct 2026 23:32:25 GMT",
+    }
+    assert TileManifest.from_json(json.dumps(payload)).bbox is None
+
+
 def test_cache_copies_the_extract_once_and_reports_progress(tmp_path: Path) -> None:
     source = LocalTileSource(tmp_path / "volume")
     manifest = publish(tmp_path / "volume", b"x" * 1000)

@@ -13,6 +13,8 @@ import requests
 
 GEOFABRIK_GREAT_BRITAIN = "https://download.geofabrik.de/europe/great-britain-latest.osm.pbf"
 CHUNK_BYTES = 8 * 1024 * 1024
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_USER_AGENT = "routing-in-a-box/0.1"
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,25 @@ class OsmExtract:
     size_bytes: int
     last_modified: str
     downloaded_at: str
+
+
+def geocode_bbox(extent: str, session: requests.Session | None = None) -> dict[str, float] | None:
+    """Return west/south/east/north for an extent slug, or None if lookup fails."""
+
+    client = session or requests.Session()
+    try:
+        response = client.get(
+            NOMINATIM_URL,
+            params={"q": extent.replace("-", " "), "format": "json", "limit": 1},
+            headers={"User-Agent": NOMINATIM_USER_AGENT},
+            timeout=30,
+        )
+        response.raise_for_status()
+        results = response.json()
+        south, north, west, east = (float(value) for value in results[0]["boundingbox"])
+    except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
+        return None
+    return {"west": west, "south": south, "east": east, "north": north}
 
 
 def sidecar_path(pbf: Path) -> Path:

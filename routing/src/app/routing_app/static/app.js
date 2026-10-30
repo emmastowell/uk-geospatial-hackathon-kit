@@ -10,6 +10,8 @@ const ui = {
   status: document.getElementById("status"),
   extent: document.getElementById("extent"),
   error: document.getElementById("error"),
+  routeHint: document.getElementById("route-hint"),
+  isochroneHint: document.getElementById("isochrone-hint"),
   summary: document.getElementById("route-summary"),
   maneuvers: document.getElementById("maneuvers"),
   contours: document.getElementById("contours"),
@@ -19,13 +21,22 @@ const ui = {
   copyRequest: document.getElementById("copy-request"),
 };
 
-const state = { tab: "route", costing: "auto", ready: false, start: null, end: null, origin: null, shape: [] };
+const state = {
+  tab: "route", costing: "auto", ready: false, start: null, end: null, origin: null, shape: [], framed: null,
+};
+
+// Great Britain is the default extract; smaller extents replace this once /api/health
+// names them, so the first click lands on roads the engine can actually route.
+const DEFAULT_VIEW = { center: [-2.6, 54.3], zoom: 5.4 };
+const EXTENT_VIEWS = {
+  "great-britain": DEFAULT_VIEW,
+  "isle-of-wight": { center: [-1.32, 50.67], zoom: 10.5 },
+};
 
 const map = new maplibregl.Map({
   container: "map",
   style: BASEMAP,
-  center: [-2.6, 54.3],
-  zoom: 5.4,
+  ...DEFAULT_VIEW,
   attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -220,10 +231,38 @@ ui.contours.addEventListener("change", planIsochrone);
 ui.apiBase.textContent = `${window.location.origin}${API}`;
 ui.copyRequest.addEventListener("click", () => navigator.clipboard.writeText(ui.lastRequest.textContent.split("\n").slice(1).join("\n")));
 
+function fitBounds(bbox) {
+  if (!bbox) return false;
+  map.fitBounds([[bbox.west, bbox.south], [bbox.east, bbox.north]], { padding: 48, maxZoom: 12, duration: 800 });
+  return true;
+}
+
+function frameExtent(health) {
+  const slug = health.manifest && health.manifest.extent;
+  if (!slug || state.framed === slug) return;
+  const name = extentName(slug);
+  if (ui.routeHint) {
+    ui.routeHint.textContent = `Click the map in ${name} to set a start, then a destination. Click again to move the destination, or drag either marker.`;
+  }
+  if (ui.isochroneHint) {
+    ui.isochroneHint.textContent = `Click the map in ${name} to set an origin. Areas show where you can reach within each time.`;
+  }
+  if (fitBounds(health.manifest.bbox)) {
+    state.framed = slug;
+    return;
+  }
+  const view = EXTENT_VIEWS[slug];
+  if (view) {
+    map.easeTo({ ...view, duration: 800 });
+    state.framed = slug;
+  }
+}
+
 function showHealth(health) {
   if (health.manifest) {
     const { extent, osm_last_modified: snapshot } = health.manifest;
     ui.extent.textContent = `${extentName(extent)} · OpenStreetMap ${formatDate(snapshot)}`;
+    frameExtent(health);
   }
   ui.status.dataset.state = health.state;
   ui.status.textContent = stateLabel(health);

@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from routing_in_a_box.osm import OsmExtract
+from routing_in_a_box.osm import OsmExtract, geocode_bbox
 
 TILE_EXTRACT_NAME = "valhalla_tiles.tar"
 MANIFEST_NAME = "manifest.json"
@@ -39,6 +39,7 @@ class TileManifest:
     pyvalhalla_version: str
     osm_url: str
     osm_last_modified: str
+    bbox: dict[str, float] | None = None
 
 
 def routing_env(python_executable: str, site_dir: Path | None = None) -> dict[str, str]:
@@ -241,6 +242,7 @@ class ValhallaTileBuilder:
             pyvalhalla_version=self.runner.capture(self.commands.version()).strip(),
             osm_url=extract.url,
             osm_last_modified=extract.last_modified,
+            bbox=geocode_bbox(self.extent),
         )
         self.publish(local_extract, manifest)
         shutil.rmtree(scratch, ignore_errors=True)
