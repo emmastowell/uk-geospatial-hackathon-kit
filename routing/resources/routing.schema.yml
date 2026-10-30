@@ -1,0 +1,6 @@
+resources:
+  schemas:
+    routing:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: Valhalla routing graphs built from OpenStreetMap, served by the routing App

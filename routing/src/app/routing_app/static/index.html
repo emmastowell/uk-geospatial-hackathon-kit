@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Valhalla routing</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%231d4ed8'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">Valhalla routing</span>
+      <span class="brand-meta" id="extent">OpenStreetMap road network</span>
+    </div>
+    <nav class="views" aria-label="Views">
+      <a href="#map" data-view="map">Map</a>
+      <a href="#guide" data-view="guide">How it works</a>
+    </nav>
+    <p class="status" id="status" data-state="starting" role="status">Starting…</p>
+  </header>
+
+  <main>
+    <section class="view map-view" id="map-view" aria-label="Map">
+      <div id="map" aria-label="Map"></div>
+
+      <aside class="panel">
+        <nav class="tabs" role="tablist" aria-label="Tools">
+          <button role="tab" aria-selected="true" data-tab="route">Route</button>
+          <button role="tab" aria-selected="false" data-tab="isochrone">Isochrone</button>
+          <button role="tab" aria-selected="false" data-tab="api">API</button>
+        </nav>
+
+        <div class="modes" role="radiogroup" aria-label="Travel mode">
+          <button role="radio" aria-checked="true" data-costing="auto">Car</button>
+          <button role="radio" aria-checked="false" data-costing="pedestrian">Walk</button>
+          <button role="radio" aria-checked="false" data-costing="bicycle">Cycle</button>
+        </div>
+
+        <p class="error" id="error" role="alert" hidden></p>
+
+        <section class="tab-panel" data-panel="route">
+          <p class="hint">Click the map to set a start, then a destination. Click again to move the
+            destination, or drag either marker.</p>
+          <div class="summary" id="route-summary" hidden></div>
+          <ol class="maneuvers" id="maneuvers"></ol>
+        </section>
+
+        <section class="tab-panel" data-panel="isochrone" hidden>
+          <p class="hint">Click the map to set an origin. Areas show where you can reach within each
+            time.</p>
+          <label class="field">Minutes, up to four
+            <input id="contours" inputmode="numeric" value="10, 20, 30, 45">
+          </label>
+          <ul class="legend" id="legend"></ul>
+        </section>
+
+        <section class="tab-panel" data-panel="api" hidden>
+          <p>Every Valhalla action is served at <code id="api-base">/api</code> and takes Valhalla's own
+            JSON request. <a href="#guide-api">Read the API guide</a> for every action, sign-in from
+            notebooks and a console to try requests.</p>
+          <h2>Last request from the map</h2>
+          <pre class="code" id="last-request">Plan a route or an isochrone to see its request.</pre>
+          <button class="secondary" id="copy-request" type="button">Copy request</button>
+        </section>
+
+        <footer class="panel-footer">
+          Routing by <a href="https://valhalla.github.io/valhalla/" target="_blank" rel="noopener">Valhalla</a>.
+          Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.
+        </footer>
+      </aside>
+    </section>
+
+    <section class="view guide-view" id="guide-view" aria-label="How it works" hidden>
+      <nav class="toc" aria-label="On this page">
+        <p class="toc-title">On this page</p>
+        <a href="#guide-overview">Overview</a>
+        <a href="#guide-architecture">Architecture</a>
+        <a href="#guide-concepts">Concepts</a>
+        <a href="#guide-api">API</a>
+        <a href="#guide-console">Try the API</a>
+        <a href="#guide-limits">Limits and errors</a>
+        <a href="#guide-data">Data and licences</a>
+      </nav>
+
+      <article class="doc">
+        <section id="guide-overview">
+          <h1>How it works</h1>
+          <p class="lede">This App runs <a href="https://valhalla.github.io/valhalla/" target="_blank" rel="noopener">Valhalla</a>, an open-source routing engine, over the OpenStreetMap road network. It answers four kinds of question: how to get from one place to another, where you can reach within a time, how long it takes between many places, and which roads a GPS trace followed. The map shows the engine at work; notebooks and other code use the same engine through an HTTP API.</p>
+          <dl class="facts" id="guide-facts">
+            <dt>Status</dt><dd>Loading…</dd>
+          </dl>
+          <p class="links">
+            <a href="#map">Plan a route on the map</a>
+            <a href="#guide-api-signin">Call the API from a notebook</a>
+            <a href="#guide-console">Try a request</a>
+          </p>
+        </section>
+
+        <section id="guide-architecture">
+          <h2>Architecture</h2>
+          <p>There are two parts: a job that turns OpenStreetMap data into routing tiles, and an App that loads those tiles and answers requests. A Unity Catalog volume sits between them, so the tiles can be rebuilt without redeploying the App.</p>
+
+          <figure class="diagram">
+            <svg viewBox="0 0 1000 500" role="img" aria-labelledby="arch-title arch-desc">
+              <title id="arch-title">Architecture of the routing service</title>
+              <desc id="arch-desc">A build job downloads the OpenStreetMap extract, builds Valhalla tiles on a classic single node and publishes them to a Unity Catalog volume. The routing App copies the tiles at start-up and serves requests from browsers, notebooks and services through the Databricks Apps proxy.</desc>
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" class="arrow-head"></path>
+                </marker>
+              </defs>
+
+              <text x="20" y="26" class="lane">Build, once or to refresh</text>
+              <text x="20" y="266" class="lane">Serve</text>
+
+              <g class="node source">
+                <rect x="20" y="40" width="230" height="160" rx="10"></rect>
+                <text x="40" y="72" class="node-title">OpenStreetMap</text>
+                <text x="40" y="100">Geofabrik extract for</text>
+                <text x="40" y="120" data-extent-name>your area</text>
+                <text x="40" y="150">2.2 GB for Great Britain</text>
+              </g>
+
+              <g class="node compute">
+                <rect x="330" y="40" width="310" height="160" rx="10"></rect>
+                <text x="350" y="72" class="node-title">Lakeflow Job</text>
+                <text x="350" y="94" class="mono">build-valhalla-tiles</text>
+                <text x="350" y="122">Classic single node, 16 cores, NVMe disk</text>
+                <text x="350" y="146">1. Admin areas (driving side, rules)</text>
+                <text x="350" y="166">2. Routing tiles in three road levels</text>
+                <text x="350" y="186">3. One indexed tar file</text>
+              </g>
+
+              <g class="node storage">
+                <rect x="720" y="40" width="260" height="160" rx="10"></rect>
+                <text x="740" y="72" class="node-title">Unity Catalog volume</text>
+                <text x="740" y="94" class="mono" data-volume-name>catalog.routing.valhalla</text>
+                <text x="740" y="122">osm/: the source extract</text>
+                <text x="740" y="146">tiles/<tspan data-extent-slug>extent</tspan>/:</text>
+                <text x="740" y="166">valhalla_tiles.tar and</text>
+                <text x="740" y="186">manifest.json</text>
+              </g>
+
+              <path d="M250,120 L328,120" class="edge" marker-end="url(#arrow)"></path>
+              <text x="289" y="110" class="edge-label" text-anchor="middle">download</text>
+              <path d="M640,120 L718,120" class="edge" marker-end="url(#arrow)"></path>
+              <text x="679" y="110" class="edge-label" text-anchor="middle">publish</text>
+
+              <g class="node client">
+                <rect x="20" y="290" width="230" height="54" rx="10"></rect>
+                <text x="40" y="313" class="node-title small">Browser</text>
+                <text x="40" y="333">This map and the API console</text>
+              </g>
+              <g class="node client">
+                <rect x="20" y="356" width="230" height="54" rx="10"></rect>
+                <text x="40" y="379" class="node-title small">Notebook</text>
+                <text x="40" y="399">Swaps its token for an App token</text>
+              </g>
+              <g class="node client">
+                <rect x="20" y="422" width="230" height="54" rx="10"></rect>
+                <text x="40" y="445" class="node-title small">Laptop or service</text>
+                <text x="40" y="465">OAuth token for the App</text>
+              </g>
+
+              <g class="node platform">
+                <rect x="330" y="310" width="230" height="130" rx="10"></rect>
+                <text x="350" y="342" class="node-title">Databricks Apps proxy</text>
+                <text x="350" y="370">Signs callers in</text>
+                <text x="350" y="394">Checks CAN USE on the App</text>
+                <text x="350" y="418">Ends requests after 120 s</text>
+              </g>
+
+              <g class="node app">
+                <rect x="640" y="270" width="340" height="210" rx="10"></rect>
+                <text x="660" y="300" class="node-title">Databricks App</text>
+                <text x="660" y="320" class="mono">valhalla-routing</text>
+                <rect x="660" y="334" width="300" height="38" rx="6" class="inner"></rect>
+                <text x="676" y="358">FastAPI: /api/* and this site</text>
+                <rect x="660" y="380" width="300" height="38" rx="6" class="inner"></rect>
+                <text x="676" y="404">4 Valhalla workers (Actors)</text>
+                <rect x="660" y="426" width="300" height="38" rx="6" class="inner"></rect>
+                <text x="676" y="450">Tiles on local disk, memory-mapped</text>
+              </g>
+
+              <path d="M250,317 L328,352" class="edge" marker-end="url(#arrow)"></path>
+              <path d="M250,383 L328,375" class="edge" marker-end="url(#arrow)"></path>
+              <path d="M250,449 L328,398" class="edge" marker-end="url(#arrow)"></path>
+              <path d="M560,375 L638,375" class="edge" marker-end="url(#arrow)"></path>
+              <text x="599" y="365" class="edge-label" text-anchor="middle">requests</text>
+              <path d="M850,200 L850,268" class="edge" marker-end="url(#arrow)"></path>
+              <text x="862" y="232" class="edge-label">copied at start-up</text>
+              <text x="862" y="250" class="edge-label">through the Files API</text>
+            </svg>
+          </figure>
+
+          <h3>Building the tiles</h3>
+          <ol>
+            <li>The <code>build-valhalla-tiles</code> job streams the OpenStreetMap extract named by its <code>osm_url</code> parameter into the volume (about 2.2 GB for Great Britain).</li>
+            <li>On a classic single-node cluster, the tools in the <code>pyvalhalla</code> wheel build an admin database (country and region boundaries, which set rules such as driving on the left), then the routing tiles, then pack the tiles into one indexed tar file.</li>
+            <li>The job copies the tar file to the volume, followed by a <code>manifest.json</code> that describes it. A full Great Britain run takes about 20 minutes, including cluster start-up; a small extract such as the Isle of Wight builds far faster.</li>
+          </ol>
+
+          <h3>Serving requests</h3>
+          <ol>
+            <li>When the App starts, its service principal reads the manifest from <code data-tiles-dir>the volume</code> through the Files API. The App has READ VOLUME on the volume and nothing else.</li>
+            <li>It copies the tile file to its local disk, because Valhalla reads tiles by memory-mapping a local file. This takes about a minute; the status at the top of the page shows progress.</li>
+            <li>It loads one Valhalla worker per CPU over that file and checks that the graph holds tiles before it reports ready.</li>
+            <li>Each request passes through the Databricks Apps proxy, which signs the caller in. FastAPI hands the request to a free worker and returns Valhalla's JSON response unchanged.</li>
+          </ol>
+
+          <h3>Design choices</h3>
+          <ul>
+            <li><strong>Classic compute for the build.</strong> Valhalla is a native C++ engine that needs plenty of memory and fast local disk for its intermediate files, so the build runs on one classic node rather than serverless compute.</li>
+            <li><strong>Tiles in a volume.</strong> The volume holds the only lasting copy. The App keeps a disposable copy, and a rebuild is a job run followed by an App restart.</li>
+            <li><strong>A pool of workers.</strong> A Valhalla worker handles one request at a time, so the App keeps one per CPU and lends each request a free one. Valhalla releases Python's global interpreter lock while it works, so the workers run in parallel.</li>
+            <li><strong>Python 3.12 with uv.</strong> The <code>pyvalhalla</code> wheel needs Python 3.12 or later. Apps that declare dependencies with <code>uv</code> can choose their Python version; the default for Apps is 3.11.</li>
+          </ul>
+        </section>
+
+        <section id="guide-concepts">
+          <h2>Concepts</h2>
+
+          <h3>The routing graph and tiles</h3>
+          <p>Valhalla turns OpenStreetMap roads and paths into a graph: junctions become nodes and road segments become one-way edges, each carrying speeds, access rules and turn restrictions. The graph is cut into square tiles at three levels: motorways and trunk roads, other main roads, and local roads. Long journeys move up to the higher levels early, which is why a route from Land's End to John o' Groats takes a fraction of a second.</p>
+
+          <h3>Locations and snapping</h3>
+          <p>Requests start from latitude and longitude points. Valhalla matches each point to the nearest road the travel mode can use, searching up to 35 km away by default (set <code>search_cutoff</code>, in metres, to change this). Use <code>locate</code> to see where a point lands on the network. Error 171 means no suitable road was found.</p>
+
+          <h3>Travel modes</h3>
+          <p>The <code>costing</code> field picks the travel mode. Each mode has its own speeds, access rules and preferences, which you can adjust under <code>costing_options</code>, for example <code>{"pedestrian": {"walking_speed": 4}}</code>.</p>
+          <table>
+            <thead><tr><th>Costing</th><th>Travel mode</th><th>Useful options</th></tr></thead>
+            <tbody>
+              <tr><td><code>auto</code></td><td>Car</td><td><code>use_highways</code>, <code>use_tolls</code>, <code>use_ferry</code> (0 to 1)</td></tr>
+              <tr><td><code>pedestrian</code></td><td>Walking</td><td><code>walking_speed</code> (km/h), <code>use_ferry</code></td></tr>
+              <tr><td><code>bicycle</code></td><td>Cycling</td><td><code>bicycle_type</code>, <code>cycling_speed</code>, <code>use_roads</code>, <code>use_hills</code></td></tr>
+              <tr><td><code>bus</code></td><td>Bus on roads open to buses (no timetables)</td><td>As for <code>auto</code></td></tr>
+              <tr><td><code>truck</code></td><td>Lorry</td><td><code>height</code>, <code>width</code>, <code>length</code> (metres), <code>weight</code> (tonnes)</td></tr>
+              <tr><td><code>motorcycle</code>, <code>motor_scooter</code>, <code>taxi</code></td><td>Other road vehicles</td><td>See the Valhalla costing reference</td></tr>
+            </tbody>
+          </table>
+
+          <h3>Routes and directions</h3>
+          <p><code>route</code> returns a trip with one leg between each pair of locations. Each leg has a summary (length and time in seconds), manoeuvres with written directions, and a shape. Set <code>directions_options.language</code> to <code>en-GB</code> for British English directions and <code>units</code> to <code>kilometers</code> or <code>miles</code>. The shape is an encoded polyline with six decimal places: in Python, <code>polyline.decode(shape, 6)</code> from the <code>polyline</code> package turns it into points.</p>
+
+          <h3>Isochrones</h3>
+          <p>An isochrone is the area you can reach from a point within a time or distance. Ask for up to four <code>contours</code>, each a <code>time</code> in minutes or a <code>distance</code> in kilometres. Set <code>polygons</code> to <code>true</code> for areas rather than outlines; <code>denoise</code> (0 to 1) removes small islands and <code>generalize</code> (metres) simplifies the edges. The response is GeoJSON, which <code>st_geomfromgeojson</code> reads directly.</p>
+
+          <h3>Travel-time matrices</h3>
+          <p><code>sources_to_targets</code> returns the time in seconds and the distance from every source to every target in one request, which is much quicker than separate routes. Cell <code>[i][j]</code> describes source <code>i</code> to target <code>j</code>. A <code>null</code> time means the matrix search did not resolve that pair; route it on its own.</p>
+
+          <h3>Map matching</h3>
+          <p><code>trace_route</code> takes a GPS trace as <code>shape</code> and returns the route it most likely followed. <code>trace_attributes</code> returns the matched roads with their names, speeds and road classes. Set <code>shape_match</code> to <code>map_snap</code> for noisy GPS points.</p>
+
+          <h3>Optimised routes</h3>
+          <p><code>optimized_route</code> puts the stops between the first and last location into the order with the shortest total time, then returns the route. Each location in the response carries its <code>original_index</code>.</p>
+
+          <h3>What the times mean</h3>
+          <p>Times assume free-flowing traffic. Valhalla takes speeds from OpenStreetMap tags and road types and adds costs for turns and junctions. There is no live or typical traffic and no public transport timetable data, so treat car times as off-peak and use them to compare places rather than to predict a particular journey.</p>
+
+          <h3>Joining results to the hackathon data</h3>
+          <p>Most hackathon tables carry an H3 resolution 8 cell (<code>h3_8</code>), and some carry GEOMETRY columns. To find what lies inside an isochrone, list the H3 cells it touches with <code>h3_coverash3</code> to narrow the search, then keep exact matches with <code>st_contains</code>. Both need serverless compute.</p>
+          <div class="snippet">
+            <button class="copy" type="button" data-copy="snippet-sql">Copy</button>
+            <pre class="code" id="snippet-sql">SELECT count(*) AS bus_stops
+FROM hackathon.two_postcodes.naptan_stops
+WHERE stoptype = 'BCT'
+  AND h3_8 IN (SELECT explode(h3_coverash3(:isochrone_geojson, 8)))
+  AND st_contains(st_geomfromgeojson(:isochrone_geojson), st_point(lon, lat, 4326))</pre>
+          </div>
+        </section>
+
+        <section id="guide-api">
+          <h2>API</h2>
+          <p>Every Valhalla action is served under one base URL with Valhalla's usual request bodies, so the <a href="https://valhalla.github.io/valhalla/api/" target="_blank" rel="noopener">Valhalla API reference</a> applies as written.</p>
+          <p class="base-url">Base URL: <code data-base-url>/api</code></p>
+          <p>Send a JSON body with <code>POST /api/&lt;action&gt;</code>, or put the same JSON in a <code>json</code> query parameter with <code>GET</code>. Responses are Valhalla's JSON, unchanged. <code>GET /api/health</code> reports whether the tiles are loaded, which data they hold and the limits in force.</p>
+
+          <table>
+            <thead><tr><th>Action</th><th>Use it for</th><th>Main fields</th></tr></thead>
+            <tbody>
+              <tr><td><code>route</code></td><td>Directions through two or more points</td><td><code>locations</code>, <code>costing</code>, <code>directions_options</code></td></tr>
+              <tr><td><code>sources_to_targets</code></td><td>Times and distances between many points</td><td><code>sources</code>, <code>targets</code>, <code>costing</code></td></tr>
+              <tr><td><code>isochrone</code></td><td>The area reachable within a time or distance</td><td><code>locations</code> (one), <code>contours</code>, <code>polygons</code></td></tr>
+              <tr><td><code>optimized_route</code></td><td>The best order to visit stops</td><td><code>locations</code>, <code>costing</code></td></tr>
+              <tr><td><code>locate</code></td><td>Where points land on the network</td><td><code>locations</code>, <code>costing</code>, <code>verbose</code></td></tr>
+              <tr><td><code>trace_route</code></td><td>The route a GPS trace followed</td><td><code>shape</code>, <code>costing</code>, <code>shape_match</code></td></tr>
+              <tr><td><code>trace_attributes</code></td><td>Road details along a GPS trace</td><td><code>shape</code>, <code>costing</code>, <code>filters</code></td></tr>
+              <tr><td><code>centroid</code></td><td>A meeting point that keeps travel low for up to five places</td><td><code>locations</code>, <code>costing</code></td></tr>
+              <tr><td><code>expansion</code></td><td>The roads a search explored, for teaching</td><td><code>action</code> plus that action's fields</td></tr>
+              <tr><td><code>status</code></td><td>Valhalla's version and the tile date</td><td>None</td></tr>
+              <tr><td><code>health</code> (GET)</td><td>This App's state, data and limits</td><td>None</td></tr>
+            </tbody>
+          </table>
+
+          <h3 id="guide-api-signin">Signing in</h3>
+          <p>Databricks Apps accept signed-in users and OAuth tokens issued for the App. They do not accept personal access tokens. Callers also need CAN USE on the App, which every workspace user has here.</p>
+          <ul>
+            <li><strong>In this browser</strong> you are already signed in, so the map and the console below call the API directly.</li>
+            <li><strong>In a notebook</strong>, swap the notebook's own token for one issued for this App and send it as a bearer token. The notebook <code>/Shared/routing/valhalla_quickstart</code> wraps this in a small client with worked examples. The token lasts about an hour.</li>
+            <li><strong>From a laptop</strong>, sign in with <code>databricks auth login</code> and send the token that <code>databricks auth token</code> prints. A service uses a service principal's OAuth credentials, and the service principal needs CAN USE on the App.</li>
+          </ul>
+
+          <div class="snippet">
+            <button class="copy" type="button" data-copy="snippet-notebook">Copy</button>
+            <pre class="code" id="snippet-notebook">import requests
+
+context = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+host, notebook_token = context.apiUrl().get(), context.apiToken().get()
+app = requests.get(f"{host}/api/2.0/apps/valhalla-routing",
+                   headers={"Authorization": f"Bearer {notebook_token}"}).json()
+token = requests.post(f"{host}/oidc/v1/token", data={
+    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+    "subject_token": notebook_token,
+    "subject_token_type": "urn:databricks:params:oauth:token-type:personal-access-token",
+    "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+    "scope": "all-apis",
+    "audience": app["oauth2_app_client_id"],
+}).json()["access_token"]
+
+trip = requests.post(f"{app['url']}/api/route",
+                     headers={"Authorization": f"Bearer {token}"},
+                     json={"locations": [{"lat": 51.5308, "lon": -0.1238},
+                                         {"lat": 51.5194, "lon": -0.1270}],
+                           "costing": "pedestrian"}).json()["trip"]
+print(trip["summary"]["length"], "km")</pre>
+          </div>
+
+          <div class="snippet">
+            <button class="copy" type="button" data-copy="snippet-curl">Copy</button>
+            <pre class="code" id="snippet-curl">TOKEN=$(databricks auth token --profile &lt;profile&gt; | jq -r .access_token)
+curl -X POST "<span data-base-url>/api</span>/route" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"locations":[{"lat":51.5308,"lon":-0.1238},{"lat":51.5194,"lon":-0.1270}],"costing":"pedestrian"}'</pre>
+          </div>
+        </section>
+
+        <section id="guide-console">
+          <h2>Try the API</h2>
+          <p>Pick an example, edit the JSON if you like, and send it to this App. The response view shortens long lists and shapes.</p>
+          <div class="console">
+            <label class="console-label" for="console-example">Example</label>
+            <select id="console-example"></select>
+            <label class="console-label" for="console-request">Request body for <code id="console-action">route</code></label>
+            <textarea id="console-request" spellcheck="false" rows="12"></textarea>
+            <div class="console-actions">
+              <button class="primary" id="console-run" type="button">Send request</button>
+              <span class="console-status" id="console-status" role="status"></span>
+            </div>
+            <pre class="code console-response" id="console-response">The response appears here.</pre>
+          </div>
+        </section>
+
+        <section id="guide-limits">
+          <h2>Limits and errors</h2>
+          <p>These limits come from the engine's configuration in this App.</p>
+          <table>
+            <thead><tr><th>Travel mode</th><th>Locations per route</th><th>Route length</th><th>Matrix pairs</th><th>Matrix span</th></tr></thead>
+            <tbody id="guide-limits-body"><tr><td colspan="5">Shown once the tiles are loaded.</td></tr></tbody>
+          </table>
+          <ul>
+            <li id="guide-limits-isochrone">Isochrones: up to four contours from one location.</li>
+            <li id="guide-limits-trace">GPS traces: limits shown once the tiles are loaded.</li>
+            <li id="guide-limits-capacity">The App serves several requests at a time and queues the rest. The Databricks Apps proxy ends any request after 120 seconds, so split very large matrices into batches.</li>
+          </ul>
+
+          <h3>Errors</h3>
+          <p>Errors use Valhalla's JSON shape, for example <code>{"error_code": 171, "error": "No suitable edges near location", "status_code": 400, "status": "Bad Request"}</code>.</p>
+          <table>
+            <thead><tr><th>Code</th><th>Meaning</th><th>What to do</th></tr></thead>
+            <tbody>
+              <tr><td>100</td><td>The body is not a JSON object</td><td>Check the JSON is valid</td></tr>
+              <tr><td>106</td><td>Unknown action</td><td>Use an action from the table above</td></tr>
+              <tr><td>120</td><td>Too few locations</td><td>Send at least two locations for a route</td></tr>
+              <tr><td>125</td><td>Unknown travel mode</td><td>Use a costing from the travel modes table</td></tr>
+              <tr><td>151, 152</td><td>An isochrone over the time or contour limit</td><td>Ask for up to four contours within the limits above</td></tr>
+              <tr><td>154</td><td>Locations further apart than the mode allows</td><td>Check the limits above or split the journey</td></tr>
+              <tr><td>170</td><td>Locations in parts of the network that do not connect</td><td>Check both points are reachable by that travel mode</td></tr>
+              <tr><td>171</td><td>No suitable road near a location</td><td>Move the point, or check latitude and longitude are not swapped</td></tr>
+              <tr><td>442</td><td>No route between the locations</td><td>Try another travel mode or check access restrictions</td></tr>
+              <tr><td>503</td><td>The App is still loading its tiles</td><td>Wait until the status at the top of the page shows Ready</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="guide-data">
+          <h2>Data and licences</h2>
+          <ul>
+            <li>Road data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database Licence. Credit OpenStreetMap when you publish maps or results built on it.</li>
+            <li>The extract comes from <a href="https://download.geofabrik.de/" target="_blank" rel="noopener">Geofabrik</a>, which refreshes its extracts daily. This App uses the snapshot shown at the top of the page.</li>
+            <li>Valhalla is open source under the MIT licence. The basemap is <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, styled with OpenMapTiles.</li>
+            <li>To refresh the data, run the <code>build-valhalla-tiles</code> job with <code>refresh_osm</code> set to <code>true</code>, then restart the App. It loads the new tiles when it starts.</li>
+          </ul>
+        </section>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script src="common.js"></script>
+  <script src="guide.js"></script>
+  <script src="app.js"></script>
+  <script src="views.js"></script>
+</body>
+</html>

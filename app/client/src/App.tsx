@@ -8,13 +8,14 @@ import {
   SheetTitle,
   useIsMobile,
 } from '@databricks/appkit-ui/react';
-import { Menu, Globe2, Hexagon, Database, LayoutDashboard, BookOpen, Shapes, GitCompare } from 'lucide-react';
+import { Menu, Globe2, Hexagon, Database, LayoutDashboard, BookOpen, Shapes, GitCompare, Route } from 'lucide-react';
 
 import { OverviewPage } from './pages/Overview';
 import { FoundationsPage } from './pages/Foundations';
 import { H3vsStPage } from './pages/H3vsSt';
 import { DbsqlReferencePage } from './pages/DbsqlReference';
 import { LakebasePage } from './pages/Lakebase';
+import { RoutingPage } from './pages/Routing';
 import { VisualizePage } from './pages/Visualize';
 import { AibiGeniePage } from './pages/AibiGenie';
 
@@ -38,7 +39,10 @@ const NAV: NavGroup[] = [
   },
   {
     heading: 'Beyond the lakehouse',
-    items: [{ to: '/lakebase', label: 'Lakebase & PostGIS', icon: Database }],
+    items: [
+      { to: '/lakebase', label: 'Lakebase & PostGIS', icon: Database },
+      { to: '/routing', label: 'Routing engines', icon: Route },
+    ],
   },
   {
     heading: 'See your data',
@@ -151,6 +155,7 @@ const router = createBrowserRouter([
       { path: '/h3-vs-st', element: <H3vsStPage /> },
       { path: '/dbsql', element: <DbsqlReferencePage /> },
       { path: '/lakebase', element: <LakebasePage /> },
+      { path: '/routing', element: <RoutingPage /> },
       { path: '/visualize', element: <VisualizePage /> },
       { path: '/aibi-genie', element: <AibiGeniePage /> },
     ],

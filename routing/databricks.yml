@@ -1,0 +1,67 @@
+bundle:
+  name: routing-in-a-box
+
+include:
+  - resources/*.yml
+
+artifacts:
+  default:
+    type: whl
+    build: uv build --wheel
+    path: .
+
+variables:
+  catalog:
+    description: >-
+      Existing catalog for the routing schema. playground is the shared sandbox that
+      scripts/setup_workspace.sql creates; pass --var catalog=<name> to use another.
+    default: playground
+  schema:
+    description: Schema the bundle creates for the routing volume
+    default: routing
+  extent:
+    description: Slug for the routed area, used in volume paths and shown by the App
+    default: great-britain
+  osm_url:
+    description: Geofabrik (or other) OpenStreetMap PBF extract the tiles are built from
+    default: https://download.geofabrik.de/europe/great-britain-latest.osm.pbf
+  build_node_type_id:
+    description: >-
+      Single node for the tile build. Valhalla needs RAM and a local NVMe disk for its
+      intermediate files; 16 cores keep a Great Britain build well under an hour.
+    default: i3.4xlarge
+  app_name:
+    description: Databricks App name (26 characters at most)
+    default: valhalla-routing
+
+# Pick the target for your cloud. The workspace comes from the CLI profile (-p <profile>).
+targets:
+  aws:
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    resources:
+      jobs:
+        build_valhalla_tiles:
+          job_clusters:
+            - job_cluster_key: tile_build_node
+              new_cluster:
+                # Losing the only node mid-build loses the run, so avoid spot capacity.
+                aws_attributes:
+                  availability: ON_DEMAND
+                  first_on_demand: 1
+
+  azure:
+    variables:
+      build_node_type_id: Standard_L16s_v3
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    resources:
+      jobs:
+        build_valhalla_tiles:
+          job_clusters:
+            - job_cluster_key: tile_build_node
+              new_cluster:
+                azure_attributes:
+                  availability: ON_DEMAND_AZURE
+                  first_on_demand: 1

@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { Card, CardContent } from '@databricks/appkit-ui/react';
-import { Hexagon, Shapes, Database, LayoutDashboard, GitCompare, BookOpen, ArrowRight, FlaskConical } from 'lucide-react';
+import { Hexagon, Shapes, Database, LayoutDashboard, GitCompare, BookOpen, ArrowRight, FlaskConical, Route } from 'lucide-react';
 import { PageHeader, Callout, Prose, SectionTitle } from '../components/content';
 import { HexGridDiagram, GeometryShapesDiagram } from '../components/Diagrams';
 
@@ -9,6 +9,7 @@ const PATH = [
   { to: '/h3-vs-st', icon: Hexagon, title: 'H3 vs ST functions', desc: 'The single most important choice: hexagonal grid indexing vs exact vector geometry — and when to combine them.' },
   { to: '/dbsql', icon: Shapes, title: 'DBSQL function reference', desc: 'A categorized tour of the 39 H3 and 80+ ST functions in Databricks SQL, with runnable examples.' },
   { to: '/lakebase', icon: Database, title: 'Lakebase & PostGIS', desc: 'Operational, low-latency geo in Lakebase Postgres with PostGIS — and how it complements lakehouse geo.' },
+  { to: '/routing', icon: Route, title: 'Routing engines', desc: 'Travel times, isochrones and matrices over the road network, and a Valhalla routing App you can deploy from this kit.' },
   { to: '/visualize', icon: LayoutDashboard, title: 'Visualize in Databricks Apps', desc: 'Render points, hexes and polygons on a map inside a custom AppKit app.' },
   { to: '/aibi-genie', icon: GitCompare, title: 'AI/BI dashboards vs Genie', desc: 'Governed map dashboards vs natural-language exploration — which to reach for.' },
 ];

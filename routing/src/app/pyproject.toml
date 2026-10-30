@@ -1,0 +1,20 @@
+[project]
+name = "valhalla-routing-app"
+version = "0.1.0"
+description = "Valhalla routing engine served as a Databricks App"
+# pyvalhalla publishes a single abi3 wheel that needs Python 3.12 or later; the upper bound
+# stops the Apps build image picking a newer Python than the lock was tested with.
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "databricks-sdk>=0.70",
+  "fastapi>=0.115",
+  "pyvalhalla==3.9.1",
+  "uvicorn>=0.30",
+]
+
+# The App installs from public PyPI. Lock with scripts/lock_app.py, which resolves through
+# the Databricks proxy and rewrites the lock to the byte-identical public URLs.
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
