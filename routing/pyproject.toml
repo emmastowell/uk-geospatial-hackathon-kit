@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "routing-in-a-box"
+name = "routing_in_a_box"
 version = "0.1.0"
 description = "Build Valhalla routing tiles from OpenStreetMap into a Unity Catalog volume"
 requires-python = ">=3.12"

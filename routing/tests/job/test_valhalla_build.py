@@ -5,12 +5,55 @@ import pytest
 
 from routing_in_a_box.valhalla_build import (
     MANIFEST_NAME,
+    PYVALHALLA_PACKAGE,
     TileManifest,
     ValhallaCommands,
     ValhallaTileBuilder,
     build_config,
+    install_valhalla,
+    pip_env,
     routing_env,
 )
+
+
+def test_pip_env_drops_fips_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENSSL_CONF", "/etc/fips.cnf")
+    monkeypatch.setenv("OPENSSL_FORCE_FIPS_MODE", "1")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    environment = pip_env()
+
+    assert "OPENSSL_CONF" not in environment
+    assert "OPENSSL_FORCE_FIPS_MODE" not in environment
+    assert environment["PATH"] == "/usr/bin"
+
+
+def test_install_valhalla_pips_into_a_target_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> object:
+        calls.append(command)
+        site = tmp_path / "pyvalhalla-site"
+        site.mkdir(parents=True, exist_ok=True)
+        (site / "valhalla").mkdir()
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("routing_in_a_box.valhalla_build.subprocess.run", fake_run)
+
+    site_dir = install_valhalla(tmp_path, "/usr/bin/python3")
+
+    assert site_dir == tmp_path / "pyvalhalla-site"
+    assert calls[0][:3] == ["/usr/bin/python3", "-m", "pip"]
+    assert "--target" in calls[0]
+    assert PYVALHALLA_PACKAGE in calls[0]
 
 
 def test_routing_env_keeps_only_path_and_pythonpath(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -22,6 +65,16 @@ def test_routing_env_keeps_only_path_and_pythonpath(monkeypatch: pytest.MonkeyPa
     environment = routing_env("/env/bin/python")
 
     assert environment == {"PATH": "/env/bin:/usr/bin", "PYTHONPATH": "/opt/lib"}
+
+
+def test_routing_env_puts_the_target_site_on_pythonpath(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+
+    environment = routing_env("/env/bin/python", Path("/s/pyvalhalla-site"))
+
+    assert environment["PATH"].startswith("/env/bin:/s/pyvalhalla-site/bin:")
+    assert environment["PYTHONPATH"] == "/s/pyvalhalla-site"
 
 
 def test_build_config_points_at_scratch_without_changing_the_defaults() -> None:

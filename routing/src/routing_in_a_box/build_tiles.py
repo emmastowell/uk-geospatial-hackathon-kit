@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from routing_in_a_box.osm import GEOFABRIK_GREAT_BRITAIN, OsmDownloader
-from routing_in_a_box.valhalla_build import ValhallaTileBuilder
+from routing_in_a_box.valhalla_build import (
+    SubprocessRunner,
+    ValhallaCommands,
+    ValhallaTileBuilder,
+    install_valhalla,
+)
 
 DEFAULT_SCRATCH_ROOT = Path("/local_disk0/valhalla")
 EXTENT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -64,7 +69,14 @@ def main() -> None:
     arguments = parse_arguments()
     extract = OsmDownloader().ensure(arguments.osm_url, arguments.pbf_path, arguments.refresh_osm)
     print(f"OSM {extract.path}: {extract.size_bytes / 1e9:.2f} GB from {extract.last_modified}")
-    builder = ValhallaTileBuilder(arguments.extent, arguments.volume_path, arguments.scratch_root)
+    site_dir = install_valhalla(arguments.scratch_root)
+    builder = ValhallaTileBuilder(
+        arguments.extent,
+        arguments.volume_path,
+        arguments.scratch_root,
+        commands=ValhallaCommands(),
+        runner=SubprocessRunner(site_dir=site_dir),
+    )
     manifest = builder.build(extract)
     published = builder.publish_dir / manifest.tile_extract
     print(f"published {published}: {manifest.size_bytes / 1e9:.2f} GB")

@@ -25,6 +25,7 @@ from routing_in_a_box.osm import OsmExtract
 TILE_EXTRACT_NAME = "valhalla_tiles.tar"
 MANIFEST_NAME = "manifest.json"
 ERROR_TAIL_LINES = 80
+PYVALHALLA_PACKAGE = "pyvalhalla==3.9.1"
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class TileManifest:
     osm_last_modified: str
 
 
-def routing_env(python_executable: str) -> dict[str, str]:
+def routing_env(python_executable: str, site_dir: Path | None = None) -> dict[str, str]:
     """Return a minimal environment for Valhalla subprocesses.
 
     Starting from an allowlist keeps Databricks' OpenSSL/FIPS variables away from the
@@ -48,13 +49,57 @@ def routing_env(python_executable: str) -> dict[str, str]:
     ``python -m valhalla`` looks its executables up there.
     """
 
-    path = os.pathsep.join(
-        part for part in (str(Path(python_executable).parent), os.environ.get("PATH")) if part
-    )
-    environment = {"PATH": path}
+    path_parts = [str(Path(python_executable).parent)]
+    if site_dir is not None:
+        path_parts.append(str(site_dir / "bin"))
+    path_parts.append(os.environ.get("PATH", ""))
+    environment = {"PATH": os.pathsep.join(part for part in path_parts if part)}
+    pythonpath_parts = [str(site_dir)] if site_dir is not None else []
     if "PYTHONPATH" in os.environ:
-        environment["PYTHONPATH"] = os.environ["PYTHONPATH"]
+        pythonpath_parts.append(os.environ["PYTHONPATH"])
+    if pythonpath_parts:
+        environment["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     return environment
+
+
+def pip_env() -> dict[str, str]:
+    """Return the process environment without Databricks OpenSSL/FIPS overrides."""
+
+    environment = dict(os.environ)
+    environment.pop("OPENSSL_CONF", None)
+    environment.pop("OPENSSL_FORCE_FIPS_MODE", None)
+    return environment
+
+
+def install_valhalla(scratch_root: Path, python_executable: str = sys.executable) -> Path:
+    """Install pyvalhalla into a target directory the Spark driver never imports.
+
+    Databricks' job Python cannot create a venv (the ephemeral environment has no
+    ensurepip). ``pip install --target`` puts the native wheel on a local disk path
+    that Valhalla subprocesses add to PYTHONPATH.
+    """
+
+    site_dir = scratch_root / "pyvalhalla-site"
+    if next(site_dir.glob("valhalla*"), None) is not None:
+        return site_dir
+    site_dir.mkdir(parents=True, exist_ok=True)
+    pip = [
+        python_executable,
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--target",
+        str(site_dir),
+        PYVALHALLA_PACKAGE,
+    ]
+    result = subprocess.run(  # noqa: S603
+        pip, capture_output=True, text=True, env=pip_env()
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()[-4000:]
+        raise RuntimeError(f"pip install {PYVALHALLA_PACKAGE} failed: {detail}")
+    return site_dir
 
 
 class ValhallaCommands:
@@ -92,8 +137,10 @@ class ValhallaCommands:
 class SubprocessRunner:
     """Run Valhalla subprocesses in the minimal environment."""
 
-    def __init__(self, python_executable: str = sys.executable) -> None:
-        self.environment = routing_env(python_executable)
+    def __init__(
+        self, python_executable: str = sys.executable, site_dir: Path | None = None
+    ) -> None:
+        self.environment = routing_env(python_executable, site_dir)
 
     def capture(self, command: Sequence[str]) -> str:
         """Run a short command and return its stdout."""

@@ -35,16 +35,14 @@ resources:
         - task_key: build_tiles
           job_cluster_key: tile_build_node
           timeout_seconds: 7200
-          # The job parameters reach the task as --extent, --osm_url and --refresh_osm.
-          python_wheel_task:
-            package_name: routing_in_a_box
-            entry_point: build-valhalla-tiles
-            named_parameters:
-              volume-path: /Volumes/${var.catalog}/${resources.schemas.routing.name}/${resources.volumes.valhalla.name}
-          libraries:
-            - whl: ../dist/*.whl
-            - pypi:
-                package: pyvalhalla==3.9.1
+          spark_python_task:
+            python_file: ../src/run_build.py
+            parameters:
+              - --wheel=${workspace.root_path}/artifacts/.internal/routing_in_a_box-0.1.0-py3-none-any.whl
+              - --extent={{job.parameters.extent}}
+              - --osm-url={{job.parameters.osm_url}}
+              - --refresh-osm={{job.parameters.refresh_osm}}
+              - --volume-path=/Volumes/${var.catalog}/${resources.schemas.routing.name}/${resources.volumes.valhalla.name}
       permissions:
         - level: CAN_VIEW
           group_name: users
